@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "killstick",
+  "version": "${version}",
+  "name": "KillStick Mod",
+  "description": "A stick that executes commands on players",
+  "authors": ["Kodik"],
+  "contact": {},
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "main": ["net.example.killstick.KillStickMod"],
+    "client": ["net.example.killstick.KillStickClient"]
+  },
+  "mixins": ["killstick.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
