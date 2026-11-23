@@ -15,7 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class KillStickScreen extends Screen {
-    private static final int MAX_COMMANDS = 6;
+    private static final int MAX_TOTAL = 60;
     private static final int SLOTS = 5;
     private static final List<String> PRESETS = List.of(
             "/kill %player%", "/msg %player% ", "/tp %player%", "/say ", "# ");
@@ -24,7 +24,14 @@ public class KillStickScreen extends Screen {
     private final List<TextFieldWidget> fields = new ArrayList<>();
     private final List<ButtonWidget> chips = new ArrayList<>();
     private final String[] chipValues = new String[SLOTS];
-    private int activeIndex;
+
+    private int activeIndex;   // номер команды во всём списке
+    private int page;
+    private int perPage = 6;
+    private int pageStart;
+    private int totalPages = 1;
+    private int labelX;
+    private int labelY;
     private int requestId = 0;
 
     public KillStickScreen(List<String> initialCommands) {
@@ -38,10 +45,26 @@ public class KillStickScreen extends Screen {
         this.activeIndex = Math.max(0, Math.min(focusIndex, this.commands.size() - 1));
     }
 
+    private TextFieldWidget activeField() {
+        int local = activeIndex - pageStart;
+        if (local < 0 || local >= fields.size()) return null;
+        return fields.get(local);
+    }
+
+    private void openAt(int focusIndex) {
+        client.setScreen(new KillStickScreen(commands, focusIndex));
+    }
+
     @Override
     protected void init() {
         fields.clear();
         chips.clear();
+
+        perPage = Math.max(3, (height - 104) / 22);
+        totalPages = (commands.size() + perPage - 1) / perPage;
+        page = Math.min(activeIndex / perPage, totalPages - 1);
+        pageStart = page * perPage;
+        int pageEnd = Math.min(commands.size(), pageStart + perPage);
 
         int fieldWidth = Math.min(300, width - 80);
         int rowWidth = fieldWidth + 24;
@@ -59,9 +82,9 @@ public class KillStickScreen extends Screen {
             addDrawableChild(chip);
         }
 
-        // Поля команд
+        // Поля команд текущей страницы
         int y = 68;
-        for (int i = 0; i < commands.size(); i++) {
+        for (int i = pageStart; i < pageEnd; i++) {
             final int index = i;
             TextFieldWidget field = new TextFieldWidget(textRenderer, x, y, fieldWidth, 20,
                     Text.literal("Command " + (i + 1)));
@@ -78,46 +101,60 @@ public class KillStickScreen extends Screen {
             addDrawableChild(ButtonWidget.builder(Text.literal("X"), button -> {
                 commands.remove(index);
                 if (commands.isEmpty()) commands.add("");
-                client.setScreen(new KillStickScreen(commands, 0));
+                openAt(Math.min(index, commands.size() - 1));
             }).dimensions(x + fieldWidth + 4, y, 20, 20).build());
             y += 22;
         }
 
-        // Нижняя строка кнопок
-        if (commands.size() < MAX_COMMANDS) {
+        // Нижняя строка: если страниц несколько, кнопки стоят на одном месте
+        int bottomY = (totalPages > 1 ? 68 + perPage * 22 : y) + 6;
+
+        if (commands.size() < MAX_TOTAL) {
             addDrawableChild(ButtonWidget.builder(Text.literal("+ Add"), button -> {
                 commands.add("");
-                client.setScreen(new KillStickScreen(commands, commands.size() - 1));
-            }).dimensions(x, y + 6, 60, 20).build());
+                openAt(commands.size() - 1);
+            }).dimensions(x, bottomY, 50, 20).build());
         }
 
         addDrawableChild(ButtonWidget.builder(Text.literal("%player%"), button -> {
-            if (activeIndex < fields.size()) {
-                TextFieldWidget field = fields.get(activeIndex);
+            TextFieldWidget field = activeField();
+            if (field != null) {
                 field.write("%player%");
                 setFocused(field);
             }
-        }).dimensions(x + 64, y + 6, 70, 20).build());
+        }).dimensions(x + 54, bottomY, 66, 20).build());
+
+        ButtonWidget prev = ButtonWidget.builder(Text.literal("<"), button -> openAt((page - 1) * perPage))
+                .dimensions(x + 124, bottomY, 22, 20).build();
+        prev.active = page > 0;
+        addDrawableChild(prev);
+
+        ButtonWidget next = ButtonWidget.builder(Text.literal(">"), button -> openAt((page + 1) * perPage))
+                .dimensions(x + 176, bottomY, 22, 20).build();
+        next.active = page < totalPages - 1;
+        addDrawableChild(next);
+
+        labelX = x + 161;
+        labelY = bottomY + 6;
 
         addDrawableChild(ButtonWidget.builder(Text.literal("Save"), button -> close())
-                .dimensions(x + rowWidth - 90, y + 6, 90, 20).build());
+                .dimensions(x + rowWidth - 70, bottomY, 70, 20).build());
 
-        if (activeIndex < fields.size()) {
-            setInitialFocus(fields.get(activeIndex));
-        }
+        TextFieldWidget focus = activeField();
+        if (focus != null) setInitialFocus(focus);
         refreshSuggestions();
     }
 
     private void applyChip(int slot) {
         String value = chipValues[slot];
-        if (value == null || activeIndex >= fields.size()) return;
-        TextFieldWidget field = fields.get(activeIndex);
+        TextFieldWidget field = activeField();
+        if (value == null || field == null) return;
         field.setText(value);
         setFocused(field);
     }
 
     private void showChips(List<String[]> items) {
-        for (int i = 0; i < SLOTS; i++) {
+        for (int i = 0; i < chips.size(); i++) {
             ButtonWidget chip = chips.get(i);
             if (i < items.size()) {
                 chip.setMessage(Text.literal(items.get(i)[0]));
@@ -189,8 +226,8 @@ public class KillStickScreen extends Screen {
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         // Определяем, в каком поле сейчас курсор, и обновляем подсказки
         for (int i = 0; i < fields.size(); i++) {
-            if (fields.get(i).isFocused() && i != activeIndex) {
-                activeIndex = i;
+            if (fields.get(i).isFocused() && pageStart + i != activeIndex) {
+                activeIndex = pageStart + i;
                 refreshSuggestions();
             }
         }
@@ -202,6 +239,8 @@ public class KillStickScreen extends Screen {
         context.drawCenteredTextWithShadow(textRenderer,
                 Text.literal("/command = command  |  text = public chat  |  #text = only you").formatted(Formatting.GRAY),
                 width / 2, 31, 0xFFFFFFFF);
+        context.drawCenteredTextWithShadow(textRenderer,
+                Text.literal((page + 1) + "/" + totalPages), labelX, labelY, 0xFFFFFFFF);
     }
 
     @Override
