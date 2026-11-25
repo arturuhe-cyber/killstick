@@ -49,8 +49,16 @@ public class KillStickScreen extends Screen {
         this.activeIndex = Math.max(0, Math.min(focusIndex, this.commands.size() - 1));
     }
 
-    private boolean isUse() {
-        return "use".equalsIgnoreCase(trigger);
+    private String nextTrigger() {
+        if ("attack".equalsIgnoreCase(trigger)) return "use";
+        if ("use".equalsIgnoreCase(trigger)) return "hit";
+        return "attack";
+    }
+
+    private String triggerLabel() {
+        if ("use".equalsIgnoreCase(trigger)) return "Trigger: USE (right click on player)";
+        if ("hit".equalsIgnoreCase(trigger)) return "Trigger: HIT (thrown item hits player)";
+        return "Trigger: ATTACK (left click)";
     }
 
     private TextFieldWidget activeField() {
@@ -80,12 +88,10 @@ public class KillStickScreen extends Screen {
         int x = (width - rowWidth) / 2;
 
         // Кнопка триггера: ЛКМ по игроку или ПКМ (натягивание)
-        addDrawableChild(ButtonWidget.builder(Text.literal(isUse()
-                        ? "Trigger: USE (right click / draw)"
-                        : "Trigger: ATTACK (left click)"), button -> {
-                    trigger = isUse() ? "attack" : "use";
+        addDrawableChild(ButtonWidget.builder(Text.literal(triggerLabel()), button -> {
+                    trigger = nextTrigger();
                     openAt(activeIndex);
-                }).dimensions(x + (rowWidth - 220) / 2, 50, 220, 18).build());
+                }).dimensions(x + (rowWidth - 240) / 2, 50, 240, 18).build());
 
         // Строка подсказок
         int gap = 3;
