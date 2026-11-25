@@ -20,6 +20,8 @@ public class KillStickScreen extends Screen {
     private static final List<String> PRESETS = List.of(
             "/kill %player%", "/msg %player% ", "/tp %player%", "/say ", "# ");
 
+    private final String itemId;
+    private String trigger;
     private final List<String> commands;
     private final List<TextFieldWidget> fields = new ArrayList<>();
     private final List<ButtonWidget> chips = new ArrayList<>();
@@ -34,15 +36,21 @@ public class KillStickScreen extends Screen {
     private int labelY;
     private int requestId = 0;
 
-    public KillStickScreen(List<String> initialCommands) {
-        this(initialCommands, 0);
+    public KillStickScreen(String itemId, KillStickClient.Profile profile) {
+        this(itemId, profile.trigger, profile.commands, 0);
     }
 
-    public KillStickScreen(List<String> initialCommands, int focusIndex) {
+    private KillStickScreen(String itemId, String trigger, List<String> initialCommands, int focusIndex) {
         super(Text.literal("KillStick"));
+        this.itemId = itemId;
+        this.trigger = trigger == null ? "attack" : trigger;
         this.commands = new ArrayList<>(initialCommands);
         if (this.commands.isEmpty()) this.commands.add("");
         this.activeIndex = Math.max(0, Math.min(focusIndex, this.commands.size() - 1));
+    }
+
+    private boolean isUse() {
+        return "use".equalsIgnoreCase(trigger);
     }
 
     private TextFieldWidget activeField() {
@@ -52,7 +60,7 @@ public class KillStickScreen extends Screen {
     }
 
     private void openAt(int focusIndex) {
-        client.setScreen(new KillStickScreen(commands, focusIndex));
+        client.setScreen(new KillStickScreen(itemId, trigger, commands, focusIndex));
     }
 
     @Override
@@ -60,7 +68,8 @@ public class KillStickScreen extends Screen {
         fields.clear();
         chips.clear();
 
-        perPage = Math.max(3, (height - 104) / 22);
+        final int fieldsTop = 96;
+        perPage = Math.max(3, (height - fieldsTop - 36) / 22);
         totalPages = (commands.size() + perPage - 1) / perPage;
         page = Math.min(activeIndex / perPage, totalPages - 1);
         pageStart = page * perPage;
@@ -70,20 +79,28 @@ public class KillStickScreen extends Screen {
         int rowWidth = fieldWidth + 24;
         int x = (width - rowWidth) / 2;
 
+        // Кнопка триггера: ЛКМ по игроку или ПКМ (натягивание)
+        addDrawableChild(ButtonWidget.builder(Text.literal(isUse()
+                        ? "Trigger: USE (right click / draw)"
+                        : "Trigger: ATTACK (left click)"), button -> {
+                    trigger = isUse() ? "attack" : "use";
+                    openAt(activeIndex);
+                }).dimensions(x + (rowWidth - 220) / 2, 50, 220, 18).build());
+
         // Строка подсказок
         int gap = 3;
         int chipWidth = (rowWidth - gap * (SLOTS - 1)) / SLOTS;
         for (int i = 0; i < SLOTS; i++) {
             final int slot = i;
             ButtonWidget chip = ButtonWidget.builder(Text.empty(), button -> applyChip(slot))
-                    .dimensions(x + i * (chipWidth + gap), 44, chipWidth, 18).build();
+                    .dimensions(x + i * (chipWidth + gap), 72, chipWidth, 18).build();
             chip.visible = false;
             chips.add(chip);
             addDrawableChild(chip);
         }
 
         // Поля команд текущей страницы
-        int y = 68;
+        int y = fieldsTop;
         for (int i = pageStart; i < pageEnd; i++) {
             final int index = i;
             TextFieldWidget field = new TextFieldWidget(textRenderer, x, y, fieldWidth, 20,
@@ -107,7 +124,7 @@ public class KillStickScreen extends Screen {
         }
 
         // Нижняя строка: если страниц несколько, кнопки стоят на одном месте
-        int bottomY = (totalPages > 1 ? 68 + perPage * 22 : y) + 6;
+        int bottomY = (totalPages > 1 ? fieldsTop + perPage * 22 : y) + 6;
 
         if (commands.size() < MAX_TOTAL) {
             addDrawableChild(ButtonWidget.builder(Text.literal("+ Add"), button -> {
@@ -232,24 +249,28 @@ public class KillStickScreen extends Screen {
             }
         }
         super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 8, 0xFFFFFFFF);
+        context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 6, 0xFFFFFFFF);
         context.drawCenteredTextWithShadow(textRenderer,
                 Text.literal("%player% = target's nickname").formatted(Formatting.GRAY),
-                width / 2, 20, 0xFFFFFFFF);
+                width / 2, 17, 0xFFFFFFFF);
         context.drawCenteredTextWithShadow(textRenderer,
                 Text.literal("/command = command  |  text = public chat  |  #text = only you").formatted(Formatting.GRAY),
-                width / 2, 31, 0xFFFFFFFF);
+                width / 2, 27, 0xFFFFFFFF);
+        context.drawCenteredTextWithShadow(textRenderer,
+                Text.literal("Item: " + itemId),
+                width / 2, 39, 0xFFFFFF55);
         context.drawCenteredTextWithShadow(textRenderer,
                 Text.literal((page + 1) + "/" + totalPages), labelX, labelY, 0xFFFFFFFF);
     }
 
     @Override
     public void close() {
-        List<String> result = new ArrayList<>();
+        KillStickClient.Profile profile = new KillStickClient.Profile();
+        profile.trigger = trigger;
         for (String c : commands) {
-            if (!c.isBlank()) result.add(c);
+            if (!c.isBlank()) profile.commands.add(c);
         }
-        KillStickClient.setCommands(result);
+        KillStickClient.saveProfile(itemId, profile);
         super.close();
     }
 }
