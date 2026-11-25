@@ -18,7 +18,7 @@ public class PlayerMixin {
         if (client.player == null) return;
 
         KillStickClient.Profile profile = KillStickClient.getProfile(KillStickClient.heldItemId(client.player));
-        if (profile == null || profile.isUse()) return;
+        if (profile == null || !profile.isAttack()) return;
 
         String target = KillStickClient.targetPlayerName(client);
         if (target != null) {
@@ -29,7 +29,8 @@ public class PlayerMixin {
 
     /**
      * ПКМ:
-     *  - триггер "use" (например трезубец): команды выполняются, когда вы начинаете натягивать предмет на игрока;
+     *  - триггер "use": команды выполняются, когда вы нажимаете ПКМ, глядя на игрока;
+     *  - триггер "hit": ПКМ работает как обычно (бросок), команды сработают при попадании;
      *  - триггер "attack": ПКМ открывает настройки предмета (как раньше у палки).
      */
     @Inject(method = "doItemUse", at = @At("HEAD"), cancellable = true)
@@ -41,10 +42,16 @@ public class PlayerMixin {
         KillStickClient.Profile profile = KillStickClient.getProfile(itemId);
         if (profile == null) return;
 
+        if (profile.isHit()) {
+            return; // срабатывает, когда брошенный предмет попадает в игрока
+        }
+
         if (profile.isUse()) {
-            String target = KillStickClient.targetPlayerName(client);
+            String target = KillStickClient.targetPlayerNameRanged(client, KillStickClient.useRange());
             if (target != null) {
                 KillStickClient.executeCommands(profile.commands, target);
+            } else {
+                KillStickClient.hint(client, "No player in sight");
             }
             // действие предмета (натягивание трезубца) не отменяем
         } else {
